@@ -17,7 +17,12 @@
 (defmacro char-decf (char-form amount)
   `(setf ,char-form (code-char (- (char-code ,char-form) ,amount)))
   )
-        
+
+(defmacro byte-incf (form &optional (amount 1))
+  `(setf ,form (mod (+ ,form ,amount) 256)))
+(defmacro byte-decf (form &optional (amount 1))
+  `(setf ,form (mod (- ,form ,amount) 256)))
+
 
 (defun opcodes (stream)
   "Returns codegen"
@@ -36,8 +41,8 @@
        (ecase ch
          (#\> (push `(incf ptr ,(count-duplicates stream #\>)) codes))
          (#\< (push `(decf ptr ,(count-duplicates stream #\<)) codes))
-         (#\+ (push `(setf (aref arr ptr) ,(count-duplicates stream #\+)) codes))
-         (#\- (push `(setf (aref arr ptr) ,(count-duplicates stream #\-)) codes))
+         (#\+ (push `(byte-incf (aref arr ptr) ,(count-duplicates stream #\+)) codes))
+         (#\- (push `(byte-decf (aref arr ptr) ,(count-duplicates stream #\-)) codes))
          (#\[ (let* ((start (gensym))
                      (end (gensym))
                      )
