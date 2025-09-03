@@ -10,6 +10,13 @@
           (read-char stream)
       )
     i))
+
+(defmacro char-incf (char-form amount)
+  `(setf ,char-form (code-char (+ (char-code ,char-form) ,amount)))
+  )
+(defmacro char-decf (char-form amount)
+  `(setf ,char-form (code-char (- (char-code ,char-form) ,amount)))
+  )
         
 
 (defun opcodes (stream)
@@ -29,8 +36,8 @@
        (ecase ch
          (#\> (push `(incf ptr ,(count-duplicates stream #\>)) codes))
          (#\< (push `(decf ptr ,(count-duplicates stream #\<)) codes))
-         (#\+ (push `(incf (aref arr ptr) ,(count-duplicates stream #\+)) codes))
-         (#\- (push `(decf (aref arr ptr) ,(count-duplicates stream #\-)) codes))
+         (#\+ (push `(setf (aref arr ptr) ,(count-duplicates stream #\+)) codes))
+         (#\- (push `(setf (aref arr ptr) ,(count-duplicates stream #\-)) codes))
          (#\[ (let* ((start (gensym))
                      (end (gensym))
                      )
@@ -43,9 +50,9 @@
                 (push `(go ,start) codes)
                 (push end codes)))
          
-         (#\. (push `(format stdout "~c" (code-char (aref arr ptr))) codes))
-         (#\, (push `(setf (aref arr ptr) (print (- (char-code (read-char stdin))
-                                             (char-code #\0))))
+         (#\. (push `(format stdout "~a" (code-char (aref arr ptr))) codes))
+         (#\, (push `(setf (aref arr ptr) (char-code (read-char stdin)))
+                                          
                                               codes))
          )
     :finally (return (nreverse codes))
@@ -58,7 +65,7 @@
   (eval
    `(lambda (&optional (stdin t) (stdout t))
       (declare (ignorable stdin stdout))
-      (let ((arr (make-array 30000 :element-type `(integer 0 255)
+      (let ((arr (make-array 30000 :element-type `(unsigned-byte 8)
                                    :initial-element 0))
             (ptr 0)
             )
@@ -69,6 +76,7 @@
         ))))
 
 (defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
+
 
 (defun main ()
   (let* ((filename (first uiop:*command-line-arguments*))
