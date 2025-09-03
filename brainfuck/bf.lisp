@@ -32,36 +32,28 @@
     :while (not (member ch (list #\> #\< #\+ #\- #\[ #\. #\,)))
     :do (read-char stream))
   (loop
-    :with codes = '()
     :while (listen stream)
     :for ch = (read-char stream)
     :while (not (eq #\] ch))
     :while (not (eq #\Newline ch))
-    :do
+    :collect
        (ecase ch
-         (#\> (push `(incf ptr ,(count-duplicates stream #\>)) codes))
-         (#\< (push `(decf ptr ,(count-duplicates stream #\<)) codes))
-         (#\+ (push `(byte-incf (aref arr ptr) ,(count-duplicates stream #\+)) codes))
-         (#\- (push `(byte-decf (aref arr ptr) ,(count-duplicates stream #\-)) codes))
+         (#\> `(incf ptr ,(count-duplicates stream #\>)))
+         (#\< `(decf ptr ,(count-duplicates stream #\<)))
+         (#\+ `(byte-incf (aref arr ptr) ,(count-duplicates stream #\+)))
+         (#\- `(byte-decf (aref arr ptr) ,(count-duplicates stream #\-)))
          (#\[ (let* ((start (gensym))
                      (end (gensym))
                      )
-                (push start codes)
-                (push `(when (= 0 (aref arr ptr))
-                         (go ,end))
-                      codes)
-                (dolist (val (opcodes stream))
-                  (push val codes))
-                (push `(go ,start) codes)
-                (push end codes)))
-         
-         (#\. (push `(format stdout "~a" (code-char (aref arr ptr))) codes))
-         (#\, (push `(setf (aref arr ptr) (char-code (read-char stdin)))
-                                          
-                                              codes))
-         )
-    :finally (return (nreverse codes))
-    ))
+                `(tagbody
+                    ,start
+                    (when (= (aref arr ptr) 0) (go ,end))
+                    ,@(opcodes stream)
+                    ,end
+                )))
+         (#\. `(format stdout "~a" (code-char (aref arr ptr))))
+         (#\, `(setf (aref arr ptr) (char-code (read-char stdin))))
+         )))
 
 
 
@@ -75,7 +67,7 @@
             (ptr 0)
             )
         (declare (type fixnum ptr))
-        (tagbody 
+        (tagbody
            ,@(opcodes stream)
            )
         ))))
