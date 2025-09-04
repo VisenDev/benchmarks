@@ -26,32 +26,76 @@
 (defun tape-input (tape)
   (setf (tape-value tape) (mod (char-code (read-char (tape-stdin tape))) 256)))
 
-(declaim (ftype (function (string) t) interpret))
-(defun interpret (program)
-  (let* ((tape (make-tape :stdin t :stdout t))
-         (jump-stack)
-         (code-ptr 0))
-    (loop for code = (char program code-ptr)
-          while code
-          do
-             (ecase code
-               (#\+ (tape-increment tape))
-               (#\- (tape-decrement tape))
-               (#\> (tape-forward tape))
-               (#\< (tape-backward tape))
-               (#\. (tape-output tape))
-               (#\, (tape-input tape))
-               (#\[ (if (= 0 (tape-value tape))
-                        (loop :while (not (char= #\] (char program code-ptr)))
-                              :do (incf code-ptr))
-                        (push (1- code-ptr) jump-stack)))
-               (#\] (setf code-ptr (pop jump-stack)) (assert code-ptr))
-               )
-             (incf code-ptr))
+(defstruct interpreter
+  tape
+  program
+  code-ptr
+  return-stack
+  )
+
+(defun interpreter-char (interpreter)
+  (char (interpreter-program interpreter) (interpreter-code-ptr interpreter)))
+
+(defun interpreter-forward (interpreter)
+  (incf (interpreter-code-ptr interpreter)))
+
+(defun interpreter-begin-block (interpreter)
+  (let* ((tape (interpreter-tape interpreter))
+         )
+    (if (= 0 (tape-value tape))
+      (loop :with unmatched-count = 0
+            :while (> unmatched-count 0)
+            :when (char= (interpreter-char interpreter) #\[)
+              :do (incf unmatched-count)
+            :end
+            :when (char= (interpreter-char interpreter) #\])
+              :do (decf unmatched-count)
+            :end
+            :do (interpreter-forward interpreter)
+            )
+      (push (interpreter-code-ptr interpreter) (interpreter-return-stack interpreter))
+      )
+  ))
+(defun interpreter-end-block (interpreter)
+  (let* ((tape (interpreter-tape interpreter))
+         )
+    (if (= 0 (tape-value tape))
+        (pop (interpreter-return-stack interpreter))
+        (setf (interpreter-code-ptr interpreter)
+              (pop (interpreter-return-stack interpreter))))
     ))
-                    
+
+(defun interpreter-step (interpreter)
+  (let* ((tape (interpreter-tape interpreter))
+         )
+  (ecase (interpreter-char interpreter)
+    (#\+ (tape-increment tape) (interpreter-forward interpreter))
+    (#\- (tape-decrement tape) (interpreter-forward interpreter))
+    (#\> (tape-forward tape) (interpreter-forward interpreter))
+    (#\< (tape-backward tape) (interpreter-forward interpreter))
+    (#\. (tape-output tape) (interpreter-forward interpreter))
+    (#\, (tape-input tape) (interpreter-forward interpreter))
+    (#\[ (interpreter-begin-block interpreter) (interpreter-forward interpreter))
+    (#\] (interpreter-end-block interpreter))
+    )))
+(defun interpreter-should-stop (interpreter)
+  (>= (interpreter-code-ptr interpreter)
+      (length (interpreter-program interpreter))))
+
 (defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
-(interpret *hello*)
+(defun interpret ()
+  (let* ((interpreter (make-interpreter
+                       :tape (make-tape :stdin *standard-input*
+                                        :stdout *standard-output*)
+                       :program *hello*
+                       :code-ptr 0
+                       :return-stack '())
+                      )
+         )
+    (loop
+      :while (not (interpreter-should-stop interpreter))
+      :do (interpreter-step interpreter))))
 
+        
 
-           
+(interpret)
