@@ -55,7 +55,7 @@
                     (setf i start)
                     ))
              (#\[ (if (= 0 (tape-value tape))
-                      (loop :for blocks = 1
+                      (loop :with blocks = 1
                             :for j :from (1+ i)
                             :for c = (char program j)
                             :while (> blocks 0)
@@ -65,4 +65,10 @@
                                  (#\] (decf blocks)))
                                (when (= blocks 0)
                                  (setf i (1+ j))))
-                      (interpret program tape i))))))
+                      (interpret program tape (1+ i)))))))
+
+
+(defparameter *hello*
+  "
+++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
+(interpret *hello*)
