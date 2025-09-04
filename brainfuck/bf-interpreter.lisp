@@ -1,20 +1,26 @@
-(defclass tape ()
-  ((arr
-    :accessor arr
-    :initform (make-array 30000
-                           :element-type '(unsigned-byte 8)
-                           :initial-element 0))
-   (ptr
-    :accessor ptr
-    :initform 0
-    :type fixnum)))
+(declaim (optimize (speed 3) (safety 0)))
 
+(defstruct tape
+  (arr (make-array 30000 :element-type '(unsigned-byte 8) :initial-element 0)
+   :type (simple-array (unsigned-byte 8) (30000)))
+  (ptr 0 :type fixnum))
+
+(declaim (ftype (function (tape) t)
+                forward
+                backward
+                increment
+                decrement)
+         (ftype (function (tape stream) t)
+                input
+                output))
+                
+                
 (defun forward (tape)
-  (incf (ptr tape)))
+  (incf (tape-ptr tape)))
 (defun backward (tape)
-  (decf (ptr tape)))
+  (decf (tape-ptr tape)))
 (defmacro tape-value (tape)
-  `(aref (arr ,tape) (ptr ,tape)))
+  `(the (unsigned-byte 8) (aref (tape-arr ,tape) (tape-ptr ,tape))))
 (defmacro wrapping-incf (form)
   `(setf ,form (mod (+ ,form 1) 256)))
 (defmacro wrapping-decf (form)
@@ -65,6 +71,7 @@
 
 (declaim (ftype (function (tape list) t) interpret-ast))
 
+(declaim (inline interpret-node))
 (defun interpret-node (tape node)
   (ecase (node-op node)
     (:incr (increment tape))
@@ -72,18 +79,18 @@
     (:forw (forward tape))
     (:back (backward tape))
     (:output (output tape *standard-output*))
-    (:input (input tape t))
+    (:input (input tape *standard-input*))
     (:loop (loop
              :until (= 0 (tape-value tape))
              :do (interpret-ast tape (node-args node)))))
-    ))
-            
+    )
+
 (defun interpret-ast (tape ast)
   (loop
     :for node :in ast
     :do (interpret-node tape node)))
-(defun interpret (program)
-  (interpret-ast (make-instance 'tape) (parse (make-string-input-stream program))))
+(defun interpret (program-stream)
+  (interpret-ast (make-tape) (parse program-stream)))
 
 (defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
-(interpret *hello*)
+(interpret (make-string-input-stream *hello*))
