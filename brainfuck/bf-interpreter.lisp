@@ -31,44 +31,59 @@
 (defun output (tape stream)
   (format stream "~c" (code-char (tape-value tape))))
 
-(defclass bf (tape)
-  ((program :accessor program
-            :initarg :program
-            :type string)
-   (i :accessor i
-      :initform 0
-      :type fixnum)))
+(deftype op () '(member :incr :decr :forw :back :input :output :loop))
+;;(defclass ast-node ()
+;;  ((op :accessor op :initarg :op :type op)
+;;   (args :accessor args :initarg :args)))
+(defstruct node (op nil :type op) args)
+
+(defun parse (program)
+  "parses a bf program into an ast"
+  (loop
+    :while (listen program)
+    :for ch = (read-char program)
+    :until (char= ch #\])
+    :collect
+    (case ch
+      (#\+ (make-node :op :incr))
+      (#\- (make-node :op :decr))
+      (#\< (make-node :op :back))
+      (#\> (make-node :op :forw))
+      (#\. (make-node :op :output))
+      (#\, (make-node :op :input))
+      (#\[ (make-node :op :loop :args (parse program))))
+      :into result
+    :finally (return (remove-if #'null result))))
+
+;;(defclass bf (tape)
+;;  ((program :accessor program
+;;            :initarg :program
+;;            :type string)
+;;   (i :accessor i
+;;      :initform 0
+;;      :type fixnum)))
+
+(declaim (ftype (function (tape list) t) interpret-ast))
+
+(defun interpret-node (tape node)
+  (ecase (node-op node)
+    (:incr (increment tape))
+    (:decr (decrement tape))
+    (:forw (forward tape))
+    (:back (backward tape))
+    (:output (output tape *standard-output*))
+    (:input (input tape t))
+    (:loop (loop
+             :until (= 0 (tape-value tape))
+             :do (interpret-ast tape (node-args node)))))
+    ))
             
-(defun interpret (program &optional (tape (make-instance 'tape)) (start 0))
-  (loop :for i :from start
-        :for ch = (char program i)
-        :while ch
-        :do
-           (case ch
-             (#\> (forward tape))
-             (#\< (backward tape))
-             (#\+ (increment tape))
-             (#\- (decrement tape))
-             (#\. (output tape *standard-output*))
-             (#\, (input tape (make-string-input-stream "")))
-             (#\] (when (not (= 0 (tape-value tape)))
-                    (setf i start)
-                    ))
-             (#\[ (if (= 0 (tape-value tape))
-                      (loop :with blocks = 1
-                            :for j :from (1+ i)
-                            :for c = (char program j)
-                            :while (> blocks 0)
-                            :do
-                               (case c
-                                 (#\[ (incf blocks))
-                                 (#\] (decf blocks)))
-                               (when (= blocks 0)
-                                 (setf i (1+ j))))
-                      (interpret program tape (1+ i)))))))
+(defun interpret-ast (tape ast)
+  (loop
+    :for node :in ast
+    :do (interpret-node tape node)))
+(defun interpret (program)
+  (interpret-ast (make-instance 'tape) (parse (make-string-input-stream program))))
 
-
-(defparameter *hello*
-  "
-++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
+(defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
 (interpret *hello*)
