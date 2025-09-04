@@ -1,0 +1,57 @@
+(defstruct tape
+  (arr (make-array 30000 :initial-element 0 :element-type '(unsigned-byte 8))
+   :type (array (unsigned-byte 8) (30000)))
+  (ptr 0 :type fixnum)
+  stdin
+  stdout
+  )
+
+(defmacro wrapping-incf (form amount modulus)
+  `(setf ,form (mod (+ ,form ,amount) ,modulus)))
+(defmacro wrapping-decf (form amount modulus)
+  `(setf ,form (mod (- ,form ,amount) ,modulus)))
+
+(defmacro tape-value (tape)
+  `(aref (tape-arr ,tape) (tape-ptr ,tape)))
+(defun tape-increment (tape)
+  (wrapping-incf (tape-value tape) 1 256))
+(defun tape-decrement (tape)
+  (wrapping-decf (tape-value tape) 1 256))
+(defun tape-forward (tape)
+  (incf (tape-ptr tape)))
+(defun tape-backward (tape)
+  (decf (tape-ptr tape)))
+(defun tape-output (tape)
+  (format (tape-stdout tape) "~a" (code-char (tape-value tape))))
+(defun tape-input (tape)
+  (setf (tape-value tape) (mod (char-code (read-char (tape-stdin tape))) 256)))
+
+(declaim (ftype (function (string) t) interpret))
+(defun interpret (program)
+  (let* ((tape (make-tape :stdin t :stdout t))
+         (jump-stack)
+         (code-ptr 0))
+    (loop for code = (char program code-ptr)
+          while code
+          do
+             (ecase code
+               (#\+ (tape-increment tape))
+               (#\- (tape-decrement tape))
+               (#\> (tape-forward tape))
+               (#\< (tape-backward tape))
+               (#\. (tape-output tape))
+               (#\, (tape-input tape))
+               (#\[ (if (= 0 (tape-value tape))
+                        (loop :while (not (char= #\] (char program code-ptr)))
+                              :do (incf code-ptr))
+                        (push (1- code-ptr) jump-stack)))
+               (#\] (setf code-ptr (pop jump-stack)) (assert code-ptr))
+               )
+             (incf code-ptr))
+    ))
+                    
+(defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
+(interpret *hello*)
+
+
+           
