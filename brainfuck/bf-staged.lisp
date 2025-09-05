@@ -1,6 +1,5 @@
-(declaim (optimize (speed 3) (safety 1)))
+(declaim (optimize (speed 1) (safety 0) (debug 0) (space 0)))
 
-(declaim (ftype (function (stream character)) count-duplicates))
 (defun count-duplicates (stream char)
   (let ((i 1))
     (declare (type fixnum i))
@@ -11,74 +10,57 @@
       )
     i))
 
-(defmacro char-incf (char-form amount)
-  `(setf ,char-form (code-char (+ (char-code ,char-form) ,amount)))
-  )
-(defmacro char-decf (char-form amount)
-  `(setf ,char-form (code-char (- (char-code ,char-form) ,amount)))
-  )
+(defmacro wrapping-incf (form &optional (delta 1))
+  `(setf ,form (mod (+ ,form ,delta) 256)))
+(defmacro wrapping-decf (form &optional (delta 1))
+  `(setf ,form (mod (- ,form ,delta) 256)))
 
-(defmacro byte-incf (form &optional (amount 1))
-  `(setf ,form (mod (+ ,form ,amount) 256)))
-(defmacro byte-decf (form &optional (amount 1))
-  `(setf ,form (mod (- ,form ,amount) 256)))
+(defstruct printer
+  (sum1 0 :type fixnum)
+  (sum2 0 :type fixnum)
+  quiet)
+(defun printer-print (p byte)
+  (if (printer-quiet p)
+      (progn
+        (wrapping-incf (printer-sum1 p) byte)
+        (wrapping-incf (printer-sum2 p) (printer-sum1 p)))
+      (progn
+        (format t "~c" (code-char byte))
+        (force-output))
+      ))
+      
 
-
-(defun opcodes (stream)
-  "Returns codegen"
+(defun parse (program arr ptr printer)
+  "parses a bf program into another program"
   (loop
-    :while (listen stream)
-    :for ch = (peek-char nil stream)
-    :while (not (member ch (list #\> #\< #\+ #\- #\[ #\. #\,)))
-    :do (read-char stream))
-  (loop
-    :while (listen stream)
-    :for ch = (read-char stream)
-    :while (not (eq #\] ch))
-    :while (not (eq #\Newline ch))
+    :while (listen program)
+    :for ch = (read-char program)
+    :until (char= ch #\])
     :collect
-       (ecase ch
-         (#\> `(incf ptr ,(count-duplicates stream #\>)))
-         (#\< `(decf ptr ,(count-duplicates stream #\<)))
-         (#\+ `(byte-incf (aref arr ptr) ,(count-duplicates stream #\+)))
-         (#\- `(byte-decf (aref arr ptr) ,(count-duplicates stream #\-)))
-         (#\[ (let* ((start (gensym))
-                     (end (gensym))
-                     )
-                `(tagbody
-                    ,start
-                    (when (= (aref arr ptr) 0) (go ,end))
-                    ,@(opcodes stream)
-                    (go ,start)
-                    ,end
-                )))
-         (#\. `(format stdout "~a" (code-char (aref arr ptr))))
-         (#\, `(setf (aref arr ptr) (char-code (read-char stdin))))
-         )))
+    (case ch
+      (#\+ `(wrapping-incf (aref ,arr ,ptr) ,(count-duplicates program #\+)))
+      (#\- `(wrapping-decf (aref ,arr ,ptr) ,(count-duplicates program #\-)))
+      (#\< `(decf ,ptr ,(count-duplicates program #\<)))
+      (#\> `(incf ,ptr ,(count-duplicates program #\>)))
+      (#\. `(printer-print ,printer (aref ,arr ,ptr)))
+      (#\[ (let* ((start (gensym)) (end (gensym)))
+             `(tagbody (when (= 0 (aref ,arr ,ptr)) (go ,end))
+               ,start
+               ,@(parse program arr ptr printer)
+               (unless (= 0 (aref ,arr ,ptr)) (go ,start))
+               ,end))))
+      :into result
+    :finally (return (remove-if #'null result))))
 
-
-
-
-(defun codegen (stream)
-  (eval
-   `(lambda (&optional (stdin t) (stdout t))
-      (declare (ignorable stdin stdout))
-      (let ((arr (make-array 30000 :element-type `(unsigned-byte 8)
-                                   :initial-element 0))
-            (ptr 0)
-            )
-        (declare (type fixnum ptr))
-        (tagbody
-           ,@(opcodes stream)
-           )
-        ))))
+(defun codegen (program quiet)
+  (eval `(defun run ()
+           (let*
+               ((arr (make-array 30000 :element-type '(unsigned-byte 8) :initial-element 0))
+                (ptr 0)
+                (printer (make-printer :quiet ,quiet))
+                )
+             (declare (optimize (speed 0) (safety 0)))
+             (tagbody ,@(parse program 'arr 'ptr 'printer))))))
 
 (defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
 
-
-(defun main ()
-  (let* ((filename (first uiop:*command-line-arguments*))
-         (program (codegen (uiop:read-file-string filename)))
-         )
-    (program)
-    ))
