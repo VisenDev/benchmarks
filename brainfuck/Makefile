@@ -29,7 +29,8 @@ executables := \
 	fsharp/target/Release/net9.0/brainfuck \
 	target/Release/net9.0/brainfuck \
 	target/bin_zig \
-	target/bin_idris
+	target/bin_idris \
+	target/bin_common_lisp
 
 artifacts := $(executables) \
 	target/bf2-kt.jar \
@@ -149,6 +150,9 @@ target/bin_zig: bf.zig | $(zig_fmt)
 
 target/bin_idris: bf.idr | target
 	$(IDRIS_BUILD)
+
+target/bin_common_lisp: bf-staged.lisp
+	$(COMMON_LISP_BUILD)
 
 # Run
 
