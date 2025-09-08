@@ -1,4 +1,5 @@
-(declaim (optimize (speed 1) (safety 0) (debug 3) (space 0)))
+(declaim (optimize (speed 3) (safety 3) (debug 3)))
+(ql:quickload :usocket)
 
 (defun count-duplicates (stream char)
   (let ((i 1))
@@ -19,21 +20,20 @@
   (sum1 0 :type fixnum)
   (sum2 0 :type fixnum)
   quiet)
+(declaim (ftype (function (printer (unsigned-byte 8)) t) printer-print))
 (defun printer-print (p byte)
   (if (printer-quiet p)
       (progn
-        (wrapping-incf (printer-sum1 p) (char-code byte))
+        (wrapping-incf (printer-sum1 p) byte)
         (wrapping-incf (printer-sum2 p) (printer-sum1 p)))
       (progn
         (format t "~c" (code-char byte))
         (force-output))
       ))
+(declaim (ftype (function (printer) fixnum) printer-get-checksum))
 (defun printer-get-checksum (p)
-;;      fn getChecksum(self: *const Printer) i32 {
-;;        return (self.sum2 << 8) | self.sum1;
-  ;;    }
-  (logior (printer-sum1 p)
-          (ash (printer-sum2 p) 8)))
+  (logior (the fixnum (printer-sum1 p))
+          (the fixnum (ash (printer-sum2 p) 8))))
 
       
 
@@ -61,17 +61,17 @@
 
 (defun codegen (program)
   (eval `(lambda (printer)
+           (declare (optimize (speed 0) (safety 0) (debug 0)))
            (let*
                ((arr (make-array 30000 :element-type '(unsigned-byte 8) :initial-element 0))
                 (ptr 0)
                 )
-             (declare (optimize (speed 0) (safety 0)))
+             (declare (fixnum ptr))
+             (declare ((array (unsigned-byte 8) (30000)) arr))
              (tagbody ,@(parse program 'arr 'ptr 'printer))))))
 
 (defparameter *hello* "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
 
-
-(ql:quickload :usocket)
 (defun notify (stream msg)
     (write-string msg stream)
     (force-output stream)
